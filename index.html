@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>6G-NEWS</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* Custom scrollbar for a premium feel - Dark Mode */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #171717; }
+        ::-webkit-scrollbar-thumb { background: #404040; border-radius: 0px; }
+        ::-webkit-scrollbar-thumb:hover { background: #525252; }
+        
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="bg-neutral-950 text-slate-200 font-sans selection:bg-pink-900 selection:text-white flex flex-col min-h-screen">
+
+    <!-- Header -->
+    <header class="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur-md sticky top-0 z-20">
+        <div class="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <span class="font-bold text-3xl tracking-tight text-white">6G-NEWS</span>
+            </div>
+            
+            <div class="flex items-center gap-2">
+                <button onclick="app.downloadCSV()" title="Download CSV" class="p-2 text-neutral-500 hover:text-pink-400 hover:bg-pink-500/10 transition-all">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Tabs -->
+        <div class="max-w-7xl mx-auto px-6 flex gap-6 mt-[-1px]">
+            <button id="tab-hn" onclick="app.switchTab('hn')" class="pb-3 text-sm font-medium border-b-2 border-pink-500 text-pink-500 transition-colors flex items-center gap-2">
+                HackerNews
+            </button>
+            <button id="tab-gn" onclick="app.switchTab('gn')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2">
+                GoogleNews
+            </button>
+            <button id="tab-reddit" onclick="app.switchTab('reddit')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2">
+                Reddit
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-6 py-8 flex-grow">
+        
+        <!-- Loading State -->
+        <div id="loading-state" class="text-center py-32 text-neutral-600 hidden">
+            <p class="text-lg animate-pulse">Initializing...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="error-state" class="hidden p-4 bg-red-900/20 border border-red-900/50 text-red-200 flex items-center gap-2 text-sm mb-6">
+            <span id="error-msg"></span>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div id="dashboard-content" class="space-y-8 fade-in hidden">
+            
+            <!-- Chart Section -->
+            <div class="bg-neutral-900 border border-neutral-800 shadow-lg p-6 flex flex-col relative overflow-hidden h-[400px]">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white tracking-tight">Timeline</h3>
+                        <div class="flex items-center gap-3 text-sm text-neutral-500 mt-1">
+                            <span id="chart-subtitle">Posts per year</span>
+                            <span class="w-px h-3 bg-neutral-700"></span>
+                            <span class="font-medium text-neutral-300"><span id="stat-total">0</span> entries</span>
+                        </div>
+                    </div>
+                    <button id="reset-filter-btn" onclick="app.setYear('All')" class="hidden px-3 py-1.5 text-xs bg-neutral-800 hover:bg-neutral-700 text-neutral-400 transition-colors border border-neutral-700">
+                        Reset Filter
+                    </button>
+                </div>
+                <div class="relative w-full flex-grow min-h-0">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Data Feed -->
+            <div class="space-y-4">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-neutral-800 pb-4">
+                    <div class="flex items-center gap-3">
+                        <h3 class="text-lg font-semibold text-white">Articles</h3>
+                        <span id="filter-badge" class="hidden bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 text-xs font-medium">
+                           <span id="filter-badge-text"></span>
+                        </span>
+                    </div>
+                    
+                    <div class="flex gap-2 w-full sm:w-auto justify-end">
+                        <div class="relative flex-grow sm:flex-grow-0 shrink-0">
+                            <input type="text" id="search-input" placeholder="Search..." class="px-3 py-2 bg-neutral-900 border border-neutral-800 text-sm text-white focus:ring-1 focus:ring-pink-500 outline-none w-full sm:w-64 placeholder:text-neutral-600">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Articles Grid -->
+                <div id="articles-list" class="grid gap-3">
+                    <!-- Articles injected here -->
+                </div>
+                <div id="no-results" class="hidden text-center py-20 text-neutral-600">
+                    <p>No results found for your filter.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const app = function() {
+            // Configuration
+            const urls = {
+                hn: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/hn_6g_data.csv',
+                gn: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/gn_6g_data.csv',
+                reddit: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/reddit_6g_data.csv'
+            };
+
+            // State
+            const state = {
+                currentTab: 'hn',
+                url: urls.hn,
+                rawData: [],
+                headers: [],
+                filteredData: [],
+                yAxis: '',
+                dateColumn: null,
+                numericCols: [],
+                selectedYear: 'All',
+                searchQuery: '',
+                chartInstance: null
+            };
+
+            // --- Parsing Logic ---
+
+            const parseCSV = (text) => {
+                const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+                if (lines.length === 0) return { headers: [], data: [] };
+
+                const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+                const data = [];
+
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i];
+                    const result = [];
+                    let current = '';
+                    let inQuotes = false;
+                    
+                    for (let j = 0; j < line.length; j++) {
+                        const char = line[j];
+                        if (char === '"') inQuotes = !inQuotes;
+                        else if (char === ',' && !inQuotes) {
+                            result.push(current.trim().replace(/^"|"$/g, ''));
+                            current = '';
+                        } else current += char;
+                    }
+                    result.push(current.trim().replace(/^"|"$/g, ''));
+
+                    if (result.length === headers.length) {
+                        const row = {};
+                        headers.forEach((header, index) => {
+                            const val = result[index];
+                            const num = Number(val);
+                            row[header] = !isNaN(num) && val.trim() !== '' ? num : val;
+                        });
+                        data.push(row);
+                    }
+                }
+                return { headers, data };
+            };
+
+            const parseDateValue = (val) => {
+                if (!val) return null;
+                if (typeof val === 'string') {
+                    // Try to handle simple dates or ISO
+                    const d = new Date(val);
+                    if (!isNaN(d.getTime())) return d;
+                }
+                let num = Number(val);
+                if (!isNaN(num)) {
+                    if (num < 100000000000) num = num * 1000;
+                    return new Date(num);
+                }
+                return null;
+            };
+
+            // --- App Logic ---
+
+            const init = async () => {
+                document.getElementById('loading-state').classList.remove('hidden');
+                document.getElementById('dashboard-content').classList.add('hidden');
+                document.getElementById('error-state').classList.add('hidden');
+
+                try {
+                    const response = await fetch(state.url);
+                    if (!response.ok) throw new Error(`Failed to fetch CSV: ${response.statusText}`);
+                    const text = await response.text();
+                    
+                    const result = parseCSV(text);
+                    state.headers = result.headers;
+                    state.rawData = result.data;
+                    
+                    if (state.rawData.length > 0) {
+                        const sample = state.rawData[0];
+                        state.numericCols = state.headers.filter(h => typeof sample[h] === 'number');
+                        // Expanded heuristics for Google News & Reddit
+                        state.dateColumn = state.headers.find(h => {
+                            const lower = h.toLowerCase();
+                            return lower.includes('created') || lower.includes('date') || lower.includes('time') || lower.includes('published');
+                        });
+                    }
+
+                    // Reset Filters
+                    state.yAxis = state.numericCols.includes('points') ? 'points' : (state.numericCols[0] || '');
+                    
+                    // Auto-select latest year
+                    if (state.dateColumn) {
+                        let maxYear = 0;
+                        state.rawData.forEach(row => {
+                            const d = parseDateValue(row[state.dateColumn]);
+                            if (d) {
+                                const y = d.getFullYear();
+                                const currentYear = new Date().getFullYear();
+                                if (y > maxYear && y <= currentYear + 1) { // Allow slightly future dates just in case, ignore errors
+                                    maxYear = y;
+                                }
+                            }
+                        });
+                        state.selectedYear = maxYear > 0 ? maxYear : 'All';
+                    } else {
+                        state.selectedYear = 'All';
+                    }
+
+                    processData();
+                    
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('dashboard-content').classList.remove('hidden');
+                } catch (err) {
+                    document.getElementById('loading-state').classList.add('hidden');
+                    document.getElementById('error-state').classList.remove('hidden');
+                    document.getElementById('error-msg').textContent = err.message;
+                }
+            };
+
+            const switchTab = (tab) => {
+                if (state.currentTab === tab) return;
+                
+                state.currentTab = tab;
+                state.url = urls[tab];
+                state.searchQuery = '';
+                document.getElementById('search-input').value = '';
+
+                // Update UI Styles
+                const activeClasses = "border-pink-500 text-pink-500".split(' ');
+                const inactiveClasses = "border-transparent text-neutral-500 hover:text-neutral-300".split(' ');
+                
+                ['hn', 'gn', 'reddit'].forEach(t => {
+                    const btn = document.getElementById(`tab-${t}`);
+                    if (t === tab) {
+                        btn.classList.add(...activeClasses);
+                        btn.classList.remove(...inactiveClasses);
+                    } else {
+                        btn.classList.add(...inactiveClasses);
+                        btn.classList.remove(...activeClasses);
+                    }
+                });
+
+                init();
+            };
+
+            const setSearch = (query) => {
+                state.searchQuery = query;
+                processData();
+            };
+
+            const processData = () => {
+                // Filter
+                state.filteredData = state.rawData.filter(row => {
+                    let matchesYear = true;
+                    if (state.selectedYear !== 'All' && state.dateColumn) {
+                        const d = parseDateValue(row[state.dateColumn]);
+                        matchesYear = d && d.getFullYear().toString() === state.selectedYear.toString();
+                    }
+                    let matchesSearch = true;
+                    if (state.searchQuery) {
+                        const lower = state.searchQuery.toLowerCase();
+                        matchesSearch = Object.values(row).some(val => String(val).toLowerCase().includes(lower));
+                    }
+                    return matchesYear && matchesSearch;
+                });
+
+                // Sort: Newest First
+                if (state.dateColumn) {
+                    state.filteredData.sort((a, b) => {
+                        const dA = parseDateValue(a[state.dateColumn]);
+                        const dB = parseDateValue(b[state.dateColumn]);
+                        return (dB || 0) - (dA || 0);
+                    });
+                }
+
+                // Update UI
+                renderStats();
+                renderChart();
+                renderList();
+                updateUIState();
+            };
+
+            const renderStats = () => {
+                document.getElementById('stat-total').textContent = state.filteredData.length;
+            };
+
+            const renderChart = () => {
+                const counts = {};
+                state.rawData.forEach(row => {
+                    if (!state.dateColumn) return;
+                    const d = parseDateValue(row[state.dateColumn]);
+                    if (d) {
+                        const y = d.getFullYear();
+                        if (y > 1970 && y < 2100) counts[y] = (counts[y] || 0) + 1;
+                    }
+                });
+                
+                const years = Object.keys(counts).sort();
+                const values = years.map(y => counts[y]);
+                const backgroundColors = years.map(y => 
+                    y.toString() === state.selectedYear.toString() ? '#3b82f6' : '#1f2937'
+                );
+
+                const ctx = document.getElementById('mainChart').getContext('2d');
+                
+                if (state.chartInstance) state.chartInstance.destroy();
+
+                state.chartInstance = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: years,
+                        datasets: [{
+                            label: 'Posts',
+                            data: values,
+                            backgroundColor: backgroundColors,
+                            borderRadius: 0,
+                            hoverBackgroundColor: '#ec4899'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const year = years[index];
+                                setYear(year === state.selectedYear ? 'All' : year);
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: '#262626' },
+                                ticks: { color: '#737373' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#737373' }
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: '#171717',
+                                borderColor: '#404040',
+                                borderWidth: 1,
+                                cornerRadius: 0,
+                                titleColor: '#fff', 
+                                bodyColor: '#e2e8f0', 
+                                padding: 10,
+                                titleFont: { weight: 'bold' }
+                            }
+                        }
+                    }
+                });
+            };
+
+            const renderList = () => {
+                const container = document.getElementById('articles-list');
+                const noResults = document.getElementById('no-results');
+                container.innerHTML = '';
+
+                if (state.filteredData.length === 0) {
+                    noResults.classList.remove('hidden');
+                    return;
+                }
+                noResults.classList.add('hidden');
+
+                state.filteredData.forEach(row => {
+                    let titleKey = state.headers.find(k => k.toLowerCase().includes('title') || k.toLowerCase() === 'name') || state.headers[0];
+                    let title = row[titleKey];
+                    
+                    let urlKey = null;
+                    let urlVal = null;
+                    for (const key of state.headers) {
+                        if (String(row[key]).startsWith('http')) {
+                            urlKey = key;
+                            urlVal = row[key];
+                            break;
+                        }
+                    }
+
+                    const card = document.createElement('div');
+                    card.className = "p-4 border border-neutral-800 hover:border-neutral-700 transition-colors bg-neutral-900 flex flex-col gap-2 shadow-lg";
+                    
+                    let titleHtml = '';
+                    if (urlVal) {
+                        titleHtml = `<a href="${urlVal}" target="_blank" class="text-base font-medium text-slate-200 leading-snug hover:text-pink-500 transition-colors">${title}</a>`;
+                    } else {
+                        titleHtml = `<h4 class="text-base font-medium text-slate-200 leading-snug cursor-default">${title}</h4>`;
+                    }
+
+                    let html = `
+                        <div class="flex justify-between items-start gap-4">
+                            ${titleHtml}
+                        </div>
+                        <div class="flex flex-wrap gap-x-6 gap-y-2 text-xs text-neutral-500 mt-1">
+                    `;
+
+                    state.headers.forEach(key => {
+                        if (key === titleKey || key === state.yAxis || key === urlKey) return;
+
+                        if (key === state.dateColumn) {
+                            const d = parseDateValue(row[key]);
+                            const dateStr = d ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : row[key];
+                            html += `
+                                <span class="flex items-center gap-1">
+                                    ${dateStr}
+                                </span>
+                            `;
+                            return;
+                        }
+
+                        let val = String(row[key]);
+                        if (val.length < 30) {
+                             html += `<span class="text-neutral-500">${val}</span>`;
+                        }
+                    });
+
+                    html += `</div>`;
+                    card.innerHTML = html;
+                    container.appendChild(card);
+                });
+
+                lucide.createIcons();
+            };
+
+            const updateUIState = () => {
+                const badge = document.getElementById('filter-badge');
+                const badgeText = document.getElementById('filter-badge-text');
+                const resetBtn = document.getElementById('reset-filter-btn');
+                const subtitle = document.getElementById('chart-subtitle');
+
+                if (state.selectedYear !== 'All') {
+                    badge.classList.remove('hidden');
+                    badgeText.textContent = state.selectedYear;
+                    resetBtn.classList.remove('hidden');
+                    subtitle.textContent = `Filtering by year: ${state.selectedYear}`;
+                } else {
+                    badge.classList.add('hidden');
+                    resetBtn.classList.add('hidden');
+                    subtitle.textContent = 'Posts per year';
+                }
+            };
+
+            const setYear = (year) => {
+                state.selectedYear = year;
+                processData();
+            };
+
+            const downloadCSV = () => {
+                if (state.rawData.length === 0) return;
+                const csvContent = [
+                    state.headers.join(','),
+                    ...state.rawData.map(row => state.headers.map(fieldName => {
+                        let val = row[fieldName];
+                        if (typeof val === 'string' && val.includes(',')) val = `"${val}"`;
+                        return val;
+                    }).join(','))
+                ].join('\n');
+
+                const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement("a");
+                const url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", "6g_news_data.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            return { init, setYear, downloadCSV, switchTab, setSearch };
+        }();
+
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('search-input').addEventListener('input', (e) => {
+                app.setSearch(e.target.value);
+            });
+            app.init();
+            lucide.createIcons();
+        });
+    </script>
+</body>
+</html>
