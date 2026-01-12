@@ -42,14 +42,17 @@
         </div>
         
         <!-- Tabs -->
-        <div class="max-w-7xl mx-auto px-6 flex gap-6 mt-[-1px]">
-            <button id="tab-hn" onclick="app.switchTab('hn')" class="pb-3 text-sm font-medium border-b-2 border-pink-500 text-pink-500 transition-colors flex items-center gap-2">
+        <div class="max-w-7xl mx-auto px-6 flex gap-6 mt-[-1px] overflow-x-auto no-scrollbar">
+            <button id="tab-hn" onclick="app.switchTab('hn')" class="pb-3 text-sm font-medium border-b-2 border-pink-500 text-pink-500 transition-colors flex items-center gap-2 whitespace-nowrap">
                 HackerNews
             </button>
-            <button id="tab-gn" onclick="app.switchTab('gn')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2">
+            <button id="tab-gn" onclick="app.switchTab('gn')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2 whitespace-nowrap">
                 GoogleNews
             </button>
-            <button id="tab-reddit" onclick="app.switchTab('reddit')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2">
+            <button id="tab-gn_asia" onclick="app.switchTab('gn_asia')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2 whitespace-nowrap">
+                GoogleNews-Asia
+            </button>
+            <button id="tab-reddit" onclick="app.switchTab('reddit')" class="pb-3 text-sm font-medium border-b-2 border-transparent text-neutral-500 hover:text-neutral-300 transition-colors flex items-center gap-2 whitespace-nowrap">
                 Reddit
             </button>
         </div>
@@ -125,6 +128,7 @@
             const urls = {
                 hn: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/hn_6g_data.csv',
                 gn: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/gn_6g_data.csv',
+                gn_asia: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/gn_asia_6g_data.csv',
                 reddit: 'https://raw.githubusercontent.com/stop6G/6G-NEWS/refs/heads/main/reddit_6g_data.csv'
             };
 
@@ -266,7 +270,7 @@
                 const activeClasses = "border-pink-500 text-pink-500".split(' ');
                 const inactiveClasses = "border-transparent text-neutral-500 hover:text-neutral-300".split(' ');
                 
-                ['hn', 'gn', 'reddit'].forEach(t => {
+                ['hn', 'gn', 'gn_asia', 'reddit'].forEach(t => {
                     const btn = document.getElementById(`tab-${t}`);
                     if (t === tab) {
                         btn.classList.add(...activeClasses);
@@ -443,6 +447,16 @@
                             html += `
                                 <span class="flex items-center gap-1">
                                     ${dateStr}
+                                </span>
+                            `;
+                            return;
+                        }
+
+                        // Specific handling for country_code
+                        if (key === 'country_code') {
+                            html += `
+                                <span class="flex items-center gap-1 font-semibold text-pink-400">
+                                    ${row[key]}
                                 </span>
                             `;
                             return;
